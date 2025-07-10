@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(APCpp)
+project(APCppWrapped)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-add_library(APCpp SHARED Archipelago.cpp)
-set_target_properties(APCpp PROPERTIES PUBLIC_HEADER Archipelago.h)
+add_library(APCppWrapped SHARED Archipelago.cpp)
+set_target_properties(APCppWrapped PROPERTIES PUBLIC_HEADER Archipelago.h)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
@@ -61,10 +61,10 @@ endif (MINGW OR NOT ZLIB_FOUND)
 set(IXWEBSOCKET_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(IXWebSocket)
 include_directories(IXWebSocket)
-target_link_libraries(APCpp ixwebsocket)
+target_link_libraries(APCppWrapped ixwebsocket)
 
 if (MINGW)
-    target_link_libraries(APCpp -static -static-libstdc++ -static-libgcc)
+    target_link_libraries(APCppWrapped -static -static-libstdc++ -static-libgcc)
 endif(MINGW)
 
 # Attempt finding system version of JsonCpp
@@ -73,7 +73,7 @@ if (PKGCONFIG_FOUND AND (NOT MINGW) AND (NOT BUNDLED_JSONCPP))
     pkg_check_modules(JSONCPP jsoncpp)
     if (JSONCPP_FOUND)
         include_directories(${JSONCPP_INCLUDE_DIRS})
-        target_link_libraries(APCpp ${JSONCPP_LDFLAGS})
+        target_link_libraries(APCppWrapped ${JSONCPP_LDFLAGS})
     endif(JSONCPP_FOUND)
 endif(PKGCONFIG_FOUND AND (NOT MINGW) AND (NOT BUNDLED_JSONCPP))
 
@@ -84,11 +84,11 @@ if((NOT JSONCPP_FOUND) OR BUNDLED_JSONCPP)
     add_subdirectory(jsoncpp)
     set_property(TARGET jsoncpp_static PROPERTY POSITION_INDEPENDENT_CODE ON)
     include_directories(jsoncpp/include)
-    target_link_libraries(APCpp jsoncpp_static)
+    target_link_libraries(APCppWrapped jsoncpp_static)
 endif((NOT JSONCPP_FOUND) OR BUNDLED_JSONCPP)
 
 if (WIN32)
-    target_link_libraries(APCpp ws2_32)
+    target_link_libraries(APCppWrapped ws2_32)
 endif(WIN32)
 
-install(TARGETS APCpp PUBLIC_HEADER)
+install(TARGETS APCppWrapped PUBLIC_HEADER)
