@@ -1,11 +1,61 @@
-# APCpp
+# APCppWrapped
 C++ Library for Clients interfacing with the [Archipelago Multi-Game Randomizer](https://archipelago.gg)
+
+## Differences from APCpp
+
+APCppWrapped is a simple fork of APCpp. It wraps APCpp's methods and members in an `Archipelago` class.
+
+The goal is to provide additional encapsulation.
+Because of this, it overcomes a limitation of the original library, which makes it possible to
+start more than one connection at once within an app.
+(If you do not need these features, I would recommend sticking with [the original library](https://github.com/N00byKing/APCpp)
+for simplicity's sake, and for the latest updates.)
+
+This library does not add additional functionality. The API is identical, other than the class wrapper.
+The code has been rearranged, though it's in no way significantly different than the original implementation
+(other than `#include` statements, constants and members being moved into the header file for abstraction reasons).
+
+## Caveats
+
+- APCppWrapped is very intentionally designed to be a simple wrapper, and nothing more.
+There are no new features, nor is there a constructor or destructor, nor are there any new virtual functions or overrides.
+This minimizes API differences, and makes code maintenance easier too.
+With that said, please remember to call `AP_Shutdown()` before destroying your class instance, or letting it go out of scope.
+- The main use case for this wrapper is for managing multiple slots in one application. That also means slots are decoupled from one another.
+If you know you'll be handling multiple connections to the same multiworld, then you might need to manage slots
+within your own `Multiworld` struct, ie. to prevent the possibility of double-gets, or even race conditions.
+(For instance, if you need to fetch a server datapackage, then you should fetch it once per multiworld,
+rather than fetching multiple datapackages.)
 
 # Usage
 
+## Example
+
+```cpp
+Archipelago *slot1 = new Archipelago();
+// Now you can start a second connection if you need to!
+Archipelago *slot2 = new Archipelago();
+
+slot1->AP_Init("archipelago.gg:12345", "MyCoolApp", "Player", "");
+slot1->AP_SetItemClearCallback(&itemclear);
+slot1->AP_SetItemRecvCallback(&itemrecv);
+slot1->AP_SetLocationCheckedCallback(&locchk);
+// and so on...
+
+slot1->AP_Start();
+// then, when you're done...
+slot1->AP_Shutdown();
+delete slot1;
+```
+
 ## Initialization
 
-Run one of the `AP_Init` functions as the first call to the library:
+First, instantiate the `Archipelago` class.
+- `Archipelago *slot = new Archipelago();`
+
+From here on out, it's implied that you use pointer member selection, ie. `slot->AP_Init()`.
+
+Then, run one of the `Archipelago::AP_Init` functions as the first call to the library:
 - `AP_Init(const char*, const char*, const char*, const char*)` with IP, Game Name, Slot Name and password (can be `""`)
 - `AP_Init(const char*)` with the filename corresponding to a generated single player game.
 

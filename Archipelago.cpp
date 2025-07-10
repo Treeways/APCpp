@@ -1,116 +1,7 @@
 #include "Archipelago.h"
 
-#include "ixwebsocket/IXNetSystem.h"
-#include "ixwebsocket/IXWebSocket.h"
-#include "ixwebsocket/IXUserAgent.h"
-
-#include <cstddef>
-#include <cstdint>
-#include <random>
-#include <fstream>
-#include <json/json.h>
-#include <json/reader.h>
-#include <json/value.h>
-#include <json/writer.h>
-#include <deque>
-#include <set>
-#include <string>
-#include <chrono>
-#include <functional>
-#include <utility>
-#include <vector>
-
-constexpr int AP_OFFLINE_SLOT = 1404;
-constexpr char const* AP_OFFLINE_NAME = "You";
-constexpr AP_NetworkVersion AP_DEFAULT_NETWORK_VERSION = {0,5,1}; // Default for compatibility reasons
-
 //Setup Stuff
-bool init = false;
-bool auth = false;
-bool refused = false;
-bool multiworld = true;
-bool isSSL = true;
-bool ssl_success = false;
-int ap_player_id;
-std::string ap_player_name;
-size_t ap_player_name_hash;
-std::string ap_ip;
-std::string ap_game;
-std::string ap_passwd;
-std::uint64_t ap_uuid = 0;
-std::mt19937 rando;
-AP_NetworkVersion client_version = AP_DEFAULT_NETWORK_VERSION; 
-
-//Deathlink Stuff
-bool deathlinkstat = false;
-bool deathlinksupported = false;
-bool enable_deathlink = false;
-int deathlink_amnesty = 0;
-int cur_deathlink_amnesty = 0;
-
-// Message System
-std::deque<AP_Message*> messageQueue;
-bool queueitemrecvmsg = true;
-
-// Data Maps
-std::map<int, AP_NetworkPlayer> map_players;
-std::map<std::pair<std::string,int64_t>, std::string> map_location_id_name;
-std::map<std::pair<std::string,int64_t>, std::string> map_item_id_name;
-
-// Callback function pointers
-std::function<void()> resetItemValues = nullptr;
-std::function<void(int64_t,bool)> getitemfunc = nullptr;
-std::function<void(int64_t)> checklocfunc = nullptr;
-std::function<void(std::vector<AP_NetworkItem>)> locinfofunc = nullptr;
-std::function<void(std::string, std::string)> recvdeath = nullptr;
-std::function<void(AP_SetReply)> setreplyfunc = nullptr;
-std::function<void(AP_Bounce)> bouncedfunc = nullptr;
-
-// Serverdata Management
-std::map<std::string,AP_DataType> map_serverdata_typemanage;
-AP_GetServerDataRequest resync_serverdata_request;
-uint64_t last_item_idx = 0;
-
-// Singleplayer Seed Info
-std::string sp_save_path;
-Json::Value sp_save_root;
-
-//Misc Data for Clients
-AP_RoomInfo lib_room_info;
-
-//Server Data Stuff
-std::map<std::string, AP_GetServerDataRequest*> map_server_data;
-
-//Slot Data Stuff
-std::map<std::string, std::function<void(int)>> map_slotdata_callback_int;
-std::map<std::string, std::function<void(std::string)>> map_slotdata_callback_raw;
-std::map<std::string, std::function<void(std::map<int,int>)>> map_slotdata_callback_mapintint;
-std::vector<std::string> slotdata_strings;
-
-// Datapackage Stuff
-std::string const datapkg_cache_path = "APCpp_datapkg.cache";
-Json::Value datapkg_cache;
-std::set<std::string> datapkg_outdated_games;
-
-ix::WebSocket webSocket;
-Json::Reader reader;
-Json::FastWriter writer;
-
-Json::Value sp_ap_root;
-
-// PRIV Func Declarations Start
-void AP_Init_Generic();
-bool parse_response(std::string msg, std::string &request);
-void APSend(std::string req);
-void WriteFileJSON(Json::Value val, std::string path);
-std::string getItemName(std::string game, int64_t id);
-std::string getLocationName(std::string game, int64_t id);
-void parseDataPkg(Json::Value new_datapkg);
-void parseDataPkg();
-AP_NetworkPlayer getPlayer(int team, int slot);
-// PRIV Func Declarations End
-
-void AP_Init(const char* ip, const char* game, const char* player_name, const char* passwd) {
+void Archipelago::AP_Init(const char* ip, const char* game, const char* player_name, const char* passwd) {
     multiworld = true;
     
     uint64_t milliseconds_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -132,7 +23,7 @@ void AP_Init(const char* ip, const char* game, const char* player_name, const ch
     //Connect to server
     ix::initNetSystem();
     webSocket.setUrl("wss://" + ap_ip);
-    webSocket.setOnMessageCallback([](const ix::WebSocketMessagePtr& msg)
+    webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg)
         {
             if (msg->type == ix::WebSocketMessageType::Message)
             {
@@ -176,7 +67,7 @@ void AP_Init(const char* ip, const char* game, const char* player_name, const ch
     AP_Init_Generic();
 }
 
-void AP_Init(const char* filename) {
+void Archipelago::AP_Init(const char* filename) {
     multiworld = false;
     std::ifstream mwfile(filename);
     reader.parse(mwfile,sp_ap_root);
@@ -190,7 +81,7 @@ void AP_Init(const char* filename) {
     AP_Init_Generic();
 }
 
-void AP_Start() {
+void Archipelago::AP_Start() {
     init = true;
     if (multiworld) {
         webSocket.start();
@@ -234,7 +125,7 @@ void AP_Start() {
     }
 }
 
-void AP_Shutdown() {
+void Archipelago::AP_Shutdown() {
     if (multiworld)
         webSocket.stop();
 
@@ -281,20 +172,20 @@ void AP_Shutdown() {
     sp_ap_root = Json::objectValue;
 }
 
-bool AP_IsInit() {
+bool Archipelago::AP_IsInit() {
     return init;
 }
 
-void AP_SetClientVersion(AP_NetworkVersion* version) {
+void Archipelago::AP_SetClientVersion(AP_NetworkVersion* version) {
     client_version.major = version->major;
     client_version.minor = version->minor;
     client_version.build = version->build;
 }
 
-void AP_SendItem(int64_t idx) {
+void Archipelago::AP_SendItem(int64_t idx) {
     AP_SendItem(std::set<int64_t>{ idx });
 }
-void AP_SendItem(std::set<int64_t> const& locations) {
+void Archipelago::AP_SendItem(std::set<int64_t> const& locations) {
     for (int64_t idx : locations) {
         printf("AP: Checked '%s'.\n", getLocationName(ap_game, idx).c_str());
     }
@@ -347,7 +238,7 @@ void AP_SendItem(std::set<int64_t> const& locations) {
     }
 }
 
-void AP_SendLocationScouts(std::set<int64_t> const& locations, int create_as_hint) {
+void Archipelago::AP_SendLocationScouts(std::set<int64_t> const& locations, int create_as_hint) {
     if (multiworld) {
         Json::Value req_t;
         req_t[0]["cmd"] = "LocationScouts";
@@ -372,7 +263,7 @@ void AP_SendLocationScouts(std::set<int64_t> const& locations, int create_as_hin
     }
 }
 
-void AP_StoryComplete() {
+void Archipelago::AP_StoryComplete() {
     if (!multiworld) return;
     Json::Value req_t;
     req_t[0]["cmd"] = "StatusUpdate";
@@ -380,7 +271,7 @@ void AP_StoryComplete() {
     APSend(writer.write(req_t));
 }
 
-void AP_DeathLinkSend() {
+void Archipelago::AP_DeathLinkSend() {
     if (!enable_deathlink || !multiworld) return;
     if (cur_deathlink_amnesty > 0) {
         cur_deathlink_amnesty--;
@@ -400,89 +291,89 @@ void AP_DeathLinkSend() {
     AP_SendBounce(b);
 }
 
-void AP_EnableQueueItemRecvMsgs(bool b) {
+void Archipelago::AP_EnableQueueItemRecvMsgs(bool b) {
     queueitemrecvmsg = b;
 }
 
-void AP_SetItemClearCallback(std::function<void()> f_itemclr) {
+void Archipelago::AP_SetItemClearCallback(std::function<void()> f_itemclr) {
     resetItemValues = f_itemclr;
 }
 
-void AP_SetItemRecvCallback(std::function<void(int64_t,bool)> f_itemrecv) {
+void Archipelago::AP_SetItemRecvCallback(std::function<void(int64_t,bool)> f_itemrecv) {
     getitemfunc = f_itemrecv;
 }
 
-void AP_SetLocationCheckedCallback(std::function<void(int64_t)> f_locrecv) {
+void Archipelago::AP_SetLocationCheckedCallback(std::function<void(int64_t)> f_locrecv) {
     checklocfunc = f_locrecv;
 }
 
-void AP_SetLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> f_locinfrecv) {
+void Archipelago::AP_SetLocationInfoCallback(std::function<void(std::vector<AP_NetworkItem>)> f_locinfrecv) {
     locinfofunc = f_locinfrecv;
 }
 
-void AP_SetDeathLinkRecvCallback(std::function<void()> f_deathrecv) {
+void Archipelago::AP_SetDeathLinkRecvCallback(std::function<void()> f_deathrecv) {
     recvdeath = [f_deathrecv](std::string, std::string){ f_deathrecv(); };
 }
-void AP_SetDeathLinkRecvCallback(std::function<void(std::string, std::string)> f_deathrecv) {
+void Archipelago::AP_SetDeathLinkRecvCallback(std::function<void(std::string, std::string)> f_deathrecv) {
     recvdeath = f_deathrecv;
 }
 
-void AP_RegisterSlotDataIntCallback(std::string key, std::function<void(int)> f_slotdata) {
+void Archipelago::AP_RegisterSlotDataIntCallback(std::string key, std::function<void(int)> f_slotdata) {
     map_slotdata_callback_int[key] = f_slotdata;
     slotdata_strings.push_back(key);
 }
 
-void AP_RegisterSlotDataRawCallback(std::string key, std::function<void(std::string)> f_slotdata) {
+void Archipelago::AP_RegisterSlotDataRawCallback(std::string key, std::function<void(std::string)> f_slotdata) {
     map_slotdata_callback_raw[key] = f_slotdata;
     slotdata_strings.push_back(key);
 }
 
-void AP_RegisterSlotDataMapIntIntCallback(std::string key, std::function<void(std::map<int,int>)> f_slotdata) {
+void Archipelago::AP_RegisterSlotDataMapIntIntCallback(std::string key, std::function<void(std::map<int,int>)> f_slotdata) {
     map_slotdata_callback_mapintint[key] = f_slotdata;
     slotdata_strings.push_back(key);
 }
 
-void AP_SetDeathLinkSupported(bool supdeathlink) {
+void Archipelago::AP_SetDeathLinkSupported(bool supdeathlink) {
     deathlinksupported = supdeathlink;
 }
 
-bool AP_DeathLinkPending() {
+bool Archipelago::AP_DeathLinkPending() {
     return deathlinkstat;
 }
 
-void AP_DeathLinkClear() {
+void Archipelago::AP_DeathLinkClear() {
     deathlinkstat = false;
 }
 
-bool AP_IsMessagePending() {
+bool Archipelago::AP_IsMessagePending() {
     return !messageQueue.empty();
 }
 
-AP_Message* AP_GetLatestMessage() {
+AP_Message* Archipelago::AP_GetLatestMessage() {
     return messageQueue.front();
 }
 
-void AP_ClearLatestMessage() {
+void Archipelago::AP_ClearLatestMessage() {
     if (AP_IsMessagePending()) {
         delete messageQueue.front();
         messageQueue.pop_front();
     }
 }
 
-void AP_Say(std::string text) {
+void Archipelago::AP_Say(std::string text) {
     Json::Value req_t;
     req_t[0]["cmd"] = "Say";
     req_t[0]["text"] = text;
     APSend(writer.write(req_t));
 }
 
-int AP_GetRoomInfo(AP_RoomInfo* client_roominfo) {
+int Archipelago::AP_GetRoomInfo(AP_RoomInfo* client_roominfo) {
     if (!auth) return 1;
     *client_roominfo = lib_room_info;
     return 0;
 }
 
-AP_ConnectionStatus AP_GetConnectionStatus() {
+AP_ConnectionStatus Archipelago::AP_GetConnectionStatus() {
     if (!multiworld && auth) return AP_ConnectionStatus::Authenticated;
     if (refused) {
         return AP_ConnectionStatus::ConnectionRefused;
@@ -497,15 +388,15 @@ AP_ConnectionStatus AP_GetConnectionStatus() {
     return AP_ConnectionStatus::Disconnected;
 }
 
-std::uint64_t AP_GetUUID() {
+std::uint64_t Archipelago::AP_GetUUID() {
     return ap_uuid;
 }
 
-int AP_GetPlayerID() {
+int Archipelago::AP_GetPlayerID() {
     return ap_player_id;
 }
 
-void AP_SetServerData(AP_SetServerDataRequest* request) {
+void Archipelago::AP_SetServerData(AP_SetServerDataRequest* request) {
     request->status = AP_RequestStatus::Pending;
 
     Json::Value req_t;
@@ -542,11 +433,11 @@ void AP_SetServerData(AP_SetServerDataRequest* request) {
     request->status = AP_RequestStatus::Done;
 }
 
-void AP_RegisterSetReplyCallback(std::function<void(AP_SetReply)> f_setreply) {
+void Archipelago::AP_RegisterSetReplyCallback(std::function<void(AP_SetReply)> f_setreply) {
     setreplyfunc = f_setreply;
 }
 
-void AP_SetNotify(std::map<std::string,AP_DataType> keylist) {
+void Archipelago::AP_SetNotify(std::map<std::string,AP_DataType> keylist) {
     Json::Value req_t;
     req_t[0]["cmd"] = "SetNotify";
     int i = 0;
@@ -558,13 +449,13 @@ void AP_SetNotify(std::map<std::string,AP_DataType> keylist) {
     APSend(writer.write(req_t));
 }
 
-void AP_SetNotify(std::string key, AP_DataType type) {
+void Archipelago::AP_SetNotify(std::string key, AP_DataType type) {
     std::map<std::string,AP_DataType> keylist;
     keylist[key] = type;
     AP_SetNotify(keylist);
 }
 
-void AP_GetServerData(AP_GetServerDataRequest* request) {
+void Archipelago::AP_GetServerData(AP_GetServerDataRequest* request) {
     request->status = AP_RequestStatus::Pending;
 
     if (map_server_data.find(request->key) != map_server_data.end()) return;
@@ -577,11 +468,11 @@ void AP_GetServerData(AP_GetServerDataRequest* request) {
     APSend(writer.write(req_t));
 }
 
-std::string AP_GetPrivateServerDataPrefix() {
+std::string Archipelago::AP_GetPrivateServerDataPrefix() {
     return "APCpp" + std::to_string(ap_player_name_hash) + "APCpp" + std::to_string(ap_player_id) + "APCpp";
 }
 
-void AP_SendBounce(AP_Bounce bounce) {
+void Archipelago::AP_SendBounce(AP_Bounce bounce) {
     Json::Value req_t;
     req_t[0]["cmd"] = "Bounce";
 
@@ -603,20 +494,20 @@ void AP_SendBounce(AP_Bounce bounce) {
     APSend(writer.write(req_t));
 }
 
-void AP_RegisterBouncedCallback(std::function<void(AP_Bounce)> f_bounced) {
+void Archipelago::AP_RegisterBouncedCallback(std::function<void(AP_Bounce)> f_bounced) {
     bouncedfunc = f_bounced;
 }
 
 // PRIV
 
-void AP_Init_Generic() {
+void Archipelago::AP_Init_Generic() {
     ap_player_name_hash = std::hash<std::string>{}(ap_player_name);
     std::ifstream datapkg_cache_file(datapkg_cache_path);
     reader.parse(datapkg_cache_file,datapkg_cache);;
     datapkg_cache_file.close();
 }
 
-bool parse_response(std::string msg, std::string &request) {
+bool Archipelago::parse_response(std::string msg, std::string &request) {
     Json::Value root;
     reader.parse(msg, root);
     for (unsigned int i = 0; i < root.size(); i++) {
@@ -954,7 +845,7 @@ bool parse_response(std::string msg, std::string &request) {
     return false;
 }
 
-void APSend(std::string req) {
+void Archipelago::APSend(std::string req) {
     if (webSocket.getReadyState() != ix::ReadyState::Open) {
         printf("AP: Not Connected. Send will fail.\n");
         return;
@@ -962,7 +853,7 @@ void APSend(std::string req) {
     webSocket.send(req);
 }
 
-void WriteFileJSON(Json::Value val, std::string path) {
+void Archipelago::WriteFileJSON(Json::Value val, std::string path) {
     std::ofstream out;
     out.open(path);
     out.seekp(0);
@@ -971,7 +862,7 @@ void WriteFileJSON(Json::Value val, std::string path) {
     out.close();
 }
 
-void parseDataPkg(Json::Value new_datapkg) {
+void Archipelago::parseDataPkg(Json::Value new_datapkg) {
     for (std::string game : new_datapkg["games"].getMemberNames()) {
         Json::Value game_data = new_datapkg["games"][game];
         datapkg_cache["games"][game] = game_data;
@@ -988,7 +879,7 @@ void parseDataPkg(Json::Value new_datapkg) {
     }
 }
 
-void parseDataPkg() {
+void Archipelago::parseDataPkg() {
     for (std::string game : datapkg_cache["games"].getMemberNames()) {
         Json::Value game_data = datapkg_cache["games"][game];
         for (std::string item_name : game_data["item_name_to_id"].getMemberNames()) {
@@ -1000,16 +891,16 @@ void parseDataPkg() {
     }
 }
 
-std::string getItemName(std::string game, int64_t id) {
+std::string Archipelago::getItemName(std::string game, int64_t id) {
     std::pair<std::string,int64_t> item = {game,id};
     return map_item_id_name.count(item) ? map_item_id_name.at(item) : std::string("Unknown Item") + std::to_string(id) + " from " + game;
 }
 
-std::string getLocationName(std::string game, int64_t id) {
+std::string Archipelago::getLocationName(std::string game, int64_t id) {
     std::pair<std::string,int64_t> location = {game,id};
     return map_location_id_name.count(location) ? map_location_id_name.at(location) : std::string("Unknown Location") + std::to_string(id) + " from " + game;
 }
 
-AP_NetworkPlayer getPlayer(int team, int slot) {
+AP_NetworkPlayer Archipelago::getPlayer(int team, int slot) {
     return map_players[slot];
 }
