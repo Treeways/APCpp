@@ -44,7 +44,7 @@ slot1->AP_SetLocationCheckedCallback(&locchk);
 
 slot1->AP_Start();
 // then, when you're done...
-slot1->AP_Disconnect();
+slot1->AP_Shutdown();
 delete slot1;
 ```
 
